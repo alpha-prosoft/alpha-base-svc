@@ -1,0 +1,292 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Daemon cluster node
+Parameters:
+  ServiceName:
+    Type: String
+
+  EnvironmentNameUpper:
+    Type: String
+  EnvironmentNameLower:
+    Type: String
+  VPCId:
+    Type: String
+
+  PrivateHostedZoneId:
+    Type: String
+  PrivateHostedZoneName:
+    Type: String
+
+
+  PrivateSubnet1A:
+    Type: String
+  PrivateSubnet2A:
+    Type: String
+
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub "*.${PrivateHostedZoneName}" 
+      DomainValidationOptions:
+      - DomainName: !Sub "*.${PrivateHostedZoneName}" 
+        HostedZoneId: !Ref PrivateHostedZoneId
+      ValidationMethod: DNS
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPCId
+      GroupDescription: "Public LB Group"
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: TCP
+          FromPort: 443
+          ToPort: 443
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentNameUpper}-LB"
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${EnvironmentNameUpper}-LB"
+      Subnets: 
+      - !Ref PrivateSubnet1A
+      - !Ref PrivateSubnet2A
+      Scheme: "internet-facing"
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup 
+      LoadBalancerAttributes:
+      - Key: 'routing.http2.enabled'
+        Value: 'false'
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentNameUpper}-LB"
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      SslPolicy: "ELBSecurityPolicy-TLS-1-2-Ext-2018-06"
+      Certificates:
+      - CertificateArn: !Ref Certificate
+      Protocol: HTTPS
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            ContentType: "text/plain"
+            MessageBody: "You've reached the listener! Congrats!"
+            StatusCode: "200"
+
+  LoadBalancerDNSRecord:
+    Type: 'AWS::Route53::RecordSet'
+    Properties:
+      HostedZoneId: !Sub '${PrivateHostedZoneId}'
+      Comment: "DNS name for Application Load Balancer"
+      Name: !Sub 'login.${PrivateHostedZoneName}.'
+      Type: A
+      AliasTarget:
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        DNSName: !GetAtt LoadBalancer.DNSName
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: True
+      AutoVerifiedAttributes:
+        - email
+      EmailConfiguration:
+        EmailSendingAccount: "COGNITO_DEFAULT"
+      MfaConfiguration: "OFF"
+      Schema:
+        - Name: email
+          Mutable: true
+          Required: true
+        - Name: name
+          Mutable: true
+          Required: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: True
+          RequireNumbers: True
+          RequireUppercase: True
+          TemporaryPasswordValidityDays: 1
+      UserPoolAddOns:
+        AdvancedSecurityMode: "AUDIT"
+      UserPoolName: !Sub "${EnvironmentNameLower}-${ServiceName}-userpool"
+
+
+  GroupNonInteractive:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      Description: "Non Interactive"
+      GroupName: "non-interactive"
+      UserPoolId: !Ref UserPool
+
+  GroupAdministrators:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      Description: "Administrators"
+      GroupName: "administrators"
+      UserPoolId: !Ref UserPool
+
+  GroupDevelopers:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      Description: "Developers"
+      GroupName: "developers"
+      UserPoolId: !Ref UserPool
+
+  UserPoolDoman:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "${AWS::AccountId}-${EnvironmentNameLower}-${ServiceName}"
+      UserPoolId: !Ref UserPool
+
+  UserPoolClientSecret:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import base64
+          import json
+          import logging
+          import string
+          import random
+          import boto3
+          import cfnresponse
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          def random_string(size=6):
+            return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(size))
+          def lambda_handler(event, context):
+            logger.info('got event {}'.format(event))
+            responseData = {}
+            if event['RequestType'] == 'Create':
+              client = boto3.client('cognito-idp')
+              response = client.describe_user_pool_client(
+                  UserPoolId=event['ResourceProperties'].get('UserPoolId', 6),
+                  ClientId=event['ResourceProperties'].get('ClientId', 6)
+              )
+              responseData['ClientSecret'] = response['UserPoolClient']['ClientSecret']
+            logger.info('responseData {}'.format(responseData))
+            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, responseData['ClientSecret'])
+      FunctionName: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${EnvironmentNameUpper}-user-pool-client-secret'
+      Handler: "index.lambda_handler"
+      Timeout: 30
+      Role: !GetAtt 'LambdaRole.Arn'
+      Runtime: python3.7      
+
+  AuthUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      AllowedOAuthFlows:
+        - implicit
+        - code
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+      AllowedOAuthFlowsUserPoolClient: True
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      CallbackURLs:
+        - !Sub "https://login.${PrivateHostedZoneName}/oauth2/idpresponse"
+      ClientName: !Sub "${EnvironmentNameLower}-${ServiceName}-client"
+      DefaultRedirectURI: !Sub  "https://login.${PrivateHostedZoneName}/oauth2/idpresponse"
+      GenerateSecret: True
+      SupportedIdentityProviders:
+        - COGNITO
+      UserPoolId: !Ref UserPool
+
+  LoginListenerRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: authenticate-cognito
+          Order: 1
+          AuthenticateCognitoConfig:
+            UserPoolArn: !GetAtt UserPool.Arn
+            UserPoolClientId: !Ref AuthUserPoolClient
+            UserPoolDomain:  !Ref UserPoolDoman 
+        - Type: fixed-response
+          Order: 2
+          FixedResponseConfig:
+            ContentType: "application/json"
+            MessageBody: '{"login" : "success"}'
+            StatusCode: "200"
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Sub "login.${PrivateHostedZoneName}"
+      ListenerArn: !Ref LoadBalancerListener
+      Priority: 1
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: "lambda-logs"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - "arn:aws:logs:*:*:*"
+              - Effect: Allow
+                Action:
+                  - cognito-idp:DescribeUserPoolClient
+                Resource:
+                  - "*"
+
+Outputs:
+  LoadBalancerArn:
+    Value: !Ref LoadBalancer
+
+  LoadBalancerListenerArn:
+    Value: !Ref LoadBalancerListener
+
+  LoadBalancerSecurityGroup:
+    Value: !Ref LoadBalancerSecurityGroup
+
+  LoadBalancerCanonicalHostedZoneID:
+    Value: !GetAtt LoadBalancer.CanonicalHostedZoneID
+
+  LoadBalancerDNSName:
+    Value: !GetAtt LoadBalancer.DNSName
+
+  AuthUserPoolDomain:
+    Value: !Sub "${UserPoolDoman}.auth.${AWS::Region}.amazoncognito.com"
+
+  AuthUserPoolId:
+    Value: !Ref UserPool
+
+  UserPoolClientSecretResource: 
+    Value: !GetAtt UserPoolClientSecret.Arn
+
+  AuthUserPoolClientId:
+    Value: !Ref AuthUserPoolClient
+  
+  CertificateArn:
+    Value: !Ref Certificate 
+

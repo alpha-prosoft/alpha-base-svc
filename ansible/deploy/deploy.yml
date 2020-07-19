@@ -1,0 +1,15 @@
+- name: 'Build Jenkins AMI'
+  hosts: localhost
+  tasks:
+  - include_role:
+     name: alpha-deploy-lib/deploy-cloudformation
+    vars:
+      type: 'BASE'
+      cloud_formation: '{{ playbook_dir }}/files/base.yml'
+  - include_role:
+      name: alpha-deploy-lib/cognito-idp-add-user
+    vars:
+      username: 'admin'
+      cognito_groups:
+      - administrators
+
