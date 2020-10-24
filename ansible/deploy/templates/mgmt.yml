@@ -1,0 +1,540 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Daemon cluster node
+Parameters:
+  ServiceName:
+    Type: String
+
+  EnvironmentNameUpper:
+    Type: String
+  EnvironmentNameLower:
+    Type: String
+  VPCId:
+    Type: String
+
+  PublicHostedZoneId:
+    Type: String
+  PublicHostedZoneName:
+    Type: String
+
+
+  PrivateSubnet1A:
+    Type: String
+  PrivateSubnet2A:
+    Type: String
+
+  CertificateArn:
+    Type: String
+
+Resources:
+  StartStopLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: "StartStopPolicy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - "arn:aws:logs:*:*:*"
+              - Effect: Allow
+                Action:
+                  - cognito-idp:DescribeUserPoolClient
+                  - autoscaling:SetDesiredCapacity
+                  - autoscaling:UpdateAutoScalingGroup
+                  - autoscaling:DescribeAutoScalingGroups
+                  - rds:DescribeDBInstances
+                  - rds:StopDBInstance
+                  - rds:StartDBInstance
+                  - es:ListDomainNames
+                  - es:UpdateElasticsearchDomainConfig
+                Resource:
+                  - "*"
+
+  StartFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Environment:
+        Variables:
+          DBInstanceName: !Sub "${EnvironmentNameUpper}-glms-health-db-pg2"
+      Code:
+        ZipFile: |
+          import json
+          import botocore
+          import boto3
+          import os
+
+          from botocore.exceptions import ClientError
+
+          autoscaling = boto3.client('autoscaling',region_name='eu-west-1')
+          rds = boto3.client('rds')
+          es = boto3.client('es')
+
+          def lambda_handler(event, context):
+              domains = es.list_domain_names()
+              for i in domains['DomainNames']:
+                  try:
+                      es.update_elasticsearch_domain_config(
+                          DomainName=i['DomainName'],
+                          ElasticsearchClusterConfig={
+                              'InstanceType': 't3.medium.elasticsearch'
+                      })
+                  except ClientError as e:
+                      print(e)
+
+              groups = autoscaling.describe_auto_scaling_groups()
+              for i in groups['AutoScalingGroups']:
+                  try:
+                      autoscaling.update_auto_scaling_group(
+                          AutoScalingGroupName=i["AutoScalingGroupName"],
+                          MinSize=1,
+                          MaxSize=1,
+                          DesiredCapacity=1
+                      )
+                  except ClientError as e:
+                      print(e)
+
+              databases = rds.describe_db_instances()
+              for i in databases['DBInstances']:
+                  try:
+                      rds.start_db_instance(
+                          DBInstanceIdentifier=i['DBInstanceIdentifier']
+                      )
+                  except ClientError as e:
+                      print(e)
+
+
+
+
+              return {
+                  "code" : 200,
+                  "body" : "Execution completed"
+              }
+
+
+
+
+      FunctionName: !Sub '${EnvironmentNameUpper}-bot-start'
+      Handler: "index.lambda_handler"
+      Timeout: 30
+      Role: !GetAtt StartStopLambdaRole.Arn
+      Runtime: python3.7
+
+  StopFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import json
+          import botocore
+          import boto3
+          import os
+
+          from botocore.exceptions import ClientError
+
+          autoscaling = boto3.client('autoscaling',region_name='eu-west-1')
+          rds = boto3.client('rds')
+          es = boto3.client('es')
+
+          def lambda_handler(event, context):
+              domains = es.list_domain_names()
+              for i in domains['DomainNames']:
+                  try:
+                      es.update_elasticsearch_domain_config(
+                          DomainName=i['DomainName'],
+                          ElasticsearchClusterConfig={
+                              'InstanceType': 't3.small.elasticsearch'
+                      })
+                  except ClientError as e:
+                      print(e)
+
+
+              groups = autoscaling.describe_auto_scaling_groups()
+              for i in groups['AutoScalingGroups']:
+                  try:
+                      autoscaling.update_auto_scaling_group(
+                          AutoScalingGroupName=i["AutoScalingGroupName"],
+                          MinSize=0,
+                          MaxSize=0,
+                          DesiredCapacity=0
+                      )
+                  except ClientError as e:
+                      print(e)
+
+              databases = rds.describe_db_instances()
+              for i in databases['DBInstances']:
+                  try:
+                      rds.stop_db_instance(
+                          DBInstanceIdentifier=i['DBInstanceIdentifier']
+                      )
+                  except ClientError as e:
+                      print(e)
+              return {
+                  "code" : 200,
+                  "body" : "Execution completed"
+              }
+
+
+      FunctionName: !Sub '${EnvironmentNameUpper}-bot-stop'
+      Handler: "index.lambda_handler"
+      Timeout: 30
+      Role: !GetAtt StartStopLambdaRole.Arn
+      Runtime: python3.7
+
+  Start1CloudwatchRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Rule to invoke Start Lambda at given time
+      Name: "start-1"
+      State: ENABLED
+      ScheduleExpression: "cron(0 5 * * ? *)"
+      Targets:
+        - Arn: !GetAtt StartFunction.Arn
+          Id: StartLambdaFunction
+
+  Stop1CloudwatchRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Rule to invoke Stop Lambda at given time
+      Name: "stop-1"
+      State: ENABLED
+      ScheduleExpression: "cron(0 9 * * ? *)"
+      Targets:
+        - Arn: !GetAtt StopFunction.Arn
+          Id: StopLambdaFunction
+
+  Start2CloudwatchRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Rule to invoke Start Lambda at given time
+      Name: "start-2"
+      State: ENABLED
+      ScheduleExpression: "cron(0 17 * * ? *)"
+      Targets:
+        - Arn: !GetAtt StartFunction.Arn
+          Id: StartLambdaFunction
+
+  Stop2CloudwatchRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Rule to invoke Stop Lambda at given time
+      Name: "stop-2"
+      State: ENABLED
+      ScheduleExpression: "cron(0 23 * * ? *)"
+      Targets:
+        - Arn: !GetAtt StopFunction.Arn
+          Id: StopLambdaFunction
+
+  CloudwatchStop1RulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt StopFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt Stop1CloudwatchRule.Arn
+
+  CloudwatchStart1RulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt StartFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt Start1CloudwatchRule.Arn
+
+  CloudwatchStop2RulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt StopFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt Stop2CloudwatchRule.Arn
+
+  CloudwatchStart2RulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt StartFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt Start2CloudwatchRule.Arn
+
+  RestAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "${ServiceName}-api"
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Policy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "execute-api:Invoke"
+            Resource: "*"
+          - Effect: Deny
+            Principal: "*"
+            Action: execute-api:Invoke
+            Resource: "*"
+            Condition:
+              NotIpAddress:
+                aws:SourceIp:
+                  - "149.154.160.0/20"
+                  - "91.108.4.0/22"
+
+  TelegramFunctionApiGatewayResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt RestAPI.RootResourceId
+      PathPart: 'telegram'
+      RestApiId: !Ref RestAPI
+
+  ApiGatewayLambdaInvocationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+  ApiGatewayLambdaInvocationPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Sub "${ServiceName}-API-Policy"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource: "*"
+      Roles:
+        - !Ref ApiGatewayLambdaInvocationRole
+
+  TelegramFunctionApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt ApiGatewayLambdaInvocationRole.Arn
+        IntegrationHttpMethod: POST
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS_PROXY
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TelegramFunction.Arn}/invocations"
+      OperationName: 'lambda'
+      ResourceId: !Ref TelegramFunctionApiGatewayResource
+      RestApiId: !Ref RestAPI
+
+  RestAPIStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId:
+        Ref: RestAPIDeployment{{ BuildId }}
+      MethodSettings:
+        - DataTraceEnabled: true
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          ResourcePath: "/*"
+      RestApiId:
+        Ref: RestAPI
+      StageName: !Sub "${EnvironmentNameUpper}"
+
+  RestAPIDeployment{{ BuildId }}:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - RestAPI
+      - TelegramFunctionApiGatewayMethod
+    Properties:
+      Description: !Sub "To deploy ${RestAPI}, ${TelegramFunctionApiGatewayResource}"
+      RestApiId: !Ref RestAPI
+
+  DomainName:
+    Type: AWS::ApiGateway::DomainName
+    Properties:
+      RegionalCertificateArn: !Ref CertificateArn
+      DomainName: !Sub '${ServiceName}.${PublicHostedZoneName}'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  DomainMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    DependsOn: RestAPIStage
+    Properties:
+      DomainName: !Ref DomainName
+      RestApiId: !Ref RestAPI
+      Stage: !Sub "${EnvironmentNameUpper}"
+
+  DomainDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref PublicHostedZoneId
+      Name: !Sub '${ServiceName}.${PublicHostedZoneName}'
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt DomainName.RegionalDomainName
+        HostedZoneId: !GetAtt DomainName.RegionalHostedZoneId
+
+  TelegramLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: "TelegramPolicy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - "arn:aws:logs:*:*:*"
+              - Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - "arn:aws:secretsmanager:eu-west-1:889655781942:secret:/pipeline/telegram/*"
+                Effect: Allow
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - "*"
+
+  TelegramFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import json
+          import botocore
+          import boto3
+          import os
+          import logging
+          import urllib.request
+          import urllib.parse
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          secretsmanager_client = boto3.client('secretsmanager')
+          lambda_client = boto3.client('lambda')
+          s3 = boto3.resource('s3')
+
+
+          api_key = secretsmanager_client.get_secret_value(SecretId='/pipeline/telegram/api-key')['SecretString']
+
+
+          def send_message(chat_id, msg):
+              logging.info("Message body: " + msg)
+              res = urllib.request.urlopen(urllib.request.Request(
+                                              url="https://api.telegram.org/bot" + api_key + "/sendMessage",
+                                              headers={'Accept': 'application/json', "Content-Type": "application/json"},
+                                              method='POST',
+                                              data = json.dumps({
+                                                "chat_id" : chat_id,
+                                                "text" : msg,
+                                                "parse_mode" : "markdown"
+                                              }).encode("utf-8")),
+                                          timeout=5)
+
+          config = s3.Object( "%s-%s-configuration" % (os.environ["AccountId"], os.environ["EnvironmentNameLower"])  , "accounts.json")
+          accounts = json.loads(config.get()['Body'].read().decode('utf-8'))
+
+
+          def is_valid_user(user, user_id, chat_id):
+            return user.get("telegram", {}).get("chat-id") == str(chat_id) \
+                    and \
+                   user.get("telegram", {}).get("user-id") == str(user_id)
+
+          def lambda_handler(event, context):
+            logger.info(event)
+            logger.info(accounts)
+            body = json.loads(event['body'])
+            chat_id = body["message"]["chat"]["id"]
+            user_id = body["message"]["from"]["id"]
+
+            user = next((x for x in accounts['devAccounts'] if is_valid_user(x, user_id, chat_id)), None)
+            logger.info("User %s" % (user))
+            if user == None:
+                  send_message(chat_id, "Hi! You dont have access yet! Ask admin to enable access for your id: %s:%s" % (user_id, chat_id))
+                  return {
+                    "statusCode": 200,
+                    "body": json.dumps('Not a friend of mine!!')
+                  }
+
+            text = body["message"]["text"];
+            if (text.startswith("/")):
+                command = text.split(" ")[0][1:]
+                response = ""
+                try:
+                  lambda_response  = lambda_client.invoke(
+                    FunctionName=os.environ["EnvironmentNameUpper"] + '-bot-' + command,
+                    InvocationType='RequestResponse',
+                    Payload=json.dumps({"msg-url" : chat_id, "params" : text}).encode('utf-8'))
+                  rawDataString = lambda_response["Payload"].read().decode('utf-8')
+                  data = json.loads(rawDataString)["body"];
+                  send_message(chat_id, data)
+
+                except lambda_client.exceptions.ResourceNotFoundException:
+                    send_message(chat_id, "Unknown command: /%s" % (command))
+                except botocore.exceptions.ClientError as e:
+                    send_message(chat_id, "Sorry cound not handle: %s" % (e))
+
+                return {
+                    "statusCode": 200,
+                    "body": response
+                }
+
+
+
+            return {
+              "statusCode": 200,
+              "body": json.dumps('Cheers from AWS Lambda!!')
+            }
+
+
+
+
+      Environment:
+        Variables:
+          EnvironmentNameUpper: !Ref EnvironmentNameUpper
+          EnvironmentNameLower: !Ref EnvironmentNameLower
+          Region: !Ref AWS::Region
+
+      FunctionName: !Sub '${EnvironmentNameUpper}-telegram'
+      Handler: "index.lambda_handler"
+      Timeout: 30
+      Role: !GetAtt TelegramLambdaRole.Arn
+      Runtime: python3.7

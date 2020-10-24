@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Daemon cluster node
+Parameters:
+  ServiceName:
+    Type: String
+
+  EnvironmentNameUpper:
+    Type: String
+  EnvironmentNameLower:
+    Type: String
+
+Resources:
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: "MainPolicy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - "arn:aws:logs:*:*:*"
+              - Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - "arn:aws:secretsmanager:eu-west-1:889655781942:secret:/pipeline/jenkins/jira-http*"
+                Effect: Allow
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import json
+          import botocore
+          import boto3
+          import os
+          import logging
+          import urllib.request
+          import urllib.parse
+          import base64
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          secretsmanager_client = boto3.client('secretsmanager')
+          credentials = json.loads(secretsmanager_client.get_secret_value(SecretId='/pipeline/jenkins/jira-http')['SecretString'])
+
+
+          def lambda_handler(event, context):
+            logger.info(event)
+            params = event["params"]
+            logger.info(credentials)
+            return issues(params)
+
+      Environment:
+        Variables:
+          EnvironmentNameUpper: !Ref EnvironmentNameUpper
+          EnvironmentNameLower: !Ref EnvironmentNameLower
+          Region: !Ref AWS::Region
+      FunctionName: !Sub '${EnvironmentNameUpper}-bot-register'
+      Handler: "index.lambda_handler"
+      Timeout: 30
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.7
