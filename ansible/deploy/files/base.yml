@@ -325,6 +325,12 @@ Resources:
     Properties:
       AWSServiceName: "ops.apigateway.amazonaws.com"
 
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'Lambda SG'
+      VpcId: !Ref VPCId
+
 Outputs:
   LoadBalancerArn:
     Value: !Ref LoadBalancer
@@ -356,3 +362,5 @@ Outputs:
   CertificateArn:
     Value: !Ref Certificate 
 
+  LambdaSecurityGroup:
+    Value: !Ref LambdaSecurityGroup
