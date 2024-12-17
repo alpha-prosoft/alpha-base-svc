@@ -1,11 +1,11 @@
-# syntax = docker/dockerfile:experimental
 ARG BUILD_ID
-#ARG PROJECT_NAME=alpha-base-infra
-
-FROM alphaprosoft/ansible-img:b88
+ARG PROJECT_NAME=alpha-jenkins-svc
+ARG AWS_REGION
+ARG AWS_DEFAULT_REGION
+ARG DOCKER_REGISTRY_URL=docker.io
+ARG ANSIBLE_LOG_LEVEL="-v"
+FROM ${DOCKER_REGISTRY_URL}/alphaprosoft/ansible-img:latest
 
 ENV BUILD_ID ${BUILD_ID}
-
-
 
 
