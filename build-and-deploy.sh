@@ -9,7 +9,7 @@ target_dir=${PWD}/target
 mkdir -p $target_dir 
 
 curl -H 'Cache-Control: no-cache' \
-        https://raw.githubusercontent.com/raiffeisenbankinternational/cbd-jenkins-pipeline/master/ext/deploy.sh \
+        https://raw.githubusercontent.com/raiffeisenbankinternational/cbd-jenkins-pipeline/master/ext/build.sh \
 	> $target_dir/build.sh
 
 curl -H 'Cache-Control: no-cache' \
