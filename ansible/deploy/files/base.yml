@@ -24,7 +24,7 @@ Parameters:
 
   LoadBalancerScheme:
     Type: String
-    
+
 Resources:
 
   ConfigurationBucket:
@@ -91,7 +91,7 @@ Resources:
       Subnets:
         - !Ref PrivateSubnet1A
         - !Ref PrivateSubnet2A
-      Scheme: !Ref Scheme
+      Scheme: !Ref LoadBalancerScheme
       SecurityGroups:
         - !Ref LoadBalancerSecurityGroup
       LoadBalancerAttributes:
