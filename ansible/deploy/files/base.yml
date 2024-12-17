@@ -24,8 +24,7 @@ Parameters:
 
   LoadBalancerScheme:
     Type: String
-    Default: "internet-facing"
-
+    
 Resources:
 
   ConfigurationBucket:
