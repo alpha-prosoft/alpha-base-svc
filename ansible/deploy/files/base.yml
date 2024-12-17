@@ -22,6 +22,10 @@ Parameters:
   PrivateSubnet2A:
     Type: String
 
+  LoadBalancerScheme:
+    Type: String
+    Default: "internet-facing"
+
 Resources:
 
   ConfigurationBucket:
@@ -88,7 +92,7 @@ Resources:
       Subnets:
         - !Ref PrivateSubnet1A
         - !Ref PrivateSubnet2A
-      Scheme: "internet-facing"
+      Scheme: !Ref Scheme
       SecurityGroups:
         - !Ref LoadBalancerSecurityGroup
       LoadBalancerAttributes:
