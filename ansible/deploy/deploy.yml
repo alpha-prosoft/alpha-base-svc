@@ -10,22 +10,11 @@
   - set_fact:
       params: '{{ params | combine( cloud_formation_output["stack_outputs"] ) }}'
 
-  - template:
-      src: '{{ playbook_dir }}/templates/mgmt.yml'
-      dest: '{{ playbook_dir }}/files/mgmt.yml'
-
-  - include_role:
-      name: alpha-deploy-lib/deploy-cloudformation
-    vars:
-      type: 'MGMT'
-      cloud_formation: '{{ playbook_dir }}/files/mgmt.yml'
-
   - include_role:
       name: alpha-deploy-lib/deploy-cloudformation
     vars:
       type: 'BOT'
       cloud_formation: '{{ playbook_dir }}/files/jira.yml'
-
 
   - include_role:
       name: alpha-deploy-lib/cognito-idp-add-user

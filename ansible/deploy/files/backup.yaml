@@ -1,0 +1,89 @@
+
+AWSServiceRoleForAPIGateway:
+  Type: "AWS::IAM::ServiceLinkedRole"
+  Properties:
+    AWSServiceName: "ops.apigateway.amazonaws.com"
+
+ElkRole:
+  Type: 'AWS::IAM::ServiceLinkedRole'
+  Properties:
+    AWSServiceName: "es.amazonaws.com"
+    Description: 'Role for ES to access resources in VPC'
+
+  AuthUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      AllowedOAuthFlows:
+        - implicit
+        - code
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+      AllowedOAuthFlowsUserPoolClient: True
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      CallbackURLs:
+        - !Sub "https://login.${PrivateHostedZoneName}/oauth2/idpresponse"
+      ClientName: !Sub "${EnvironmentNameLower}-${ServiceName}-client"
+      DefaultRedirectURI: !Sub  "https://login.${PrivateHostedZoneName}/oauth2/idpresponse"
+      GenerateSecret: True
+      SupportedIdentityProviders:
+        - COGNITO
+      UserPoolId: !Ref UserPool
+
+  LoginListenerRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: authenticate-cognito
+          Order: 1
+          AuthenticateCognitoConfig:
+            UserPoolArn: !GetAtt UserPool.Arn
+            UserPoolClientId: !Ref AuthUserPoolClient
+            UserPoolDomain:  !Ref UserPoolDoman
+        - Type: fixed-response
+          Order: 2
+          FixedResponseConfig:
+            ContentType: "application/json"
+            MessageBody: '{"login" : "success"}'
+            StatusCode: "200"
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Sub "login.${PrivateHostedZoneName}"
+      ListenerArn: !Ref LoadBalancerListener
+      Priority: 1
+
+  LoadBalancerDNSRecord:
+    Type: 'AWS::Route53::RecordSet'
+    Properties:
+      HostedZoneId: !Sub '${PrivateHostedZoneId}'
+      Comment: "DNS name for Application Load Balancer"
+      Name: !Sub 'login.${PrivateHostedZoneName}.'
+      Type: A
+      AliasTarget:
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        DNSName: !GetAtt LoadBalancer.DNSName
+
+  ApiGatewayLoggingRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "apigateway.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt "ApiGatewayLoggingRole.Arn"

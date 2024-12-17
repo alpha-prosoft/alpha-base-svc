@@ -26,6 +26,7 @@ Parameters:
     Type: String
 
 Resources:
+
   StartStopLambdaRole:
     Type: AWS::IAM::Role
     Properties:
