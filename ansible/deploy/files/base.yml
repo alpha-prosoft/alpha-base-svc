@@ -156,10 +156,6 @@ Resources:
         - ALLOW_REFRESH_TOKEN_AUTH
         - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_ADMIN_USER_PASSWORD_AUTH
-      AllowedOAuthFlowsUserPoolClient: True
-      AllowedOAuthScopes:
-        - email
-        - profile
       ClientName: !Sub "${EnvironmentNameLower}-${ServiceName}-userpoolclient"
       GenerateSecret: True
       SupportedIdentityProviders:
