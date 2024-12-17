@@ -16,5 +16,8 @@ curl -H 'Cache-Control: no-cache' \
         https://raw.githubusercontent.com/raiffeisenbankinternational/cbd-jenkins-pipeline/master/ext/deploy.sh \
 	> $target_dir/run.sh
 
+chmor +x ${target_dir}/build.sh
+chmor +x ${target_dir}/run.sh
+
 ${target_dir}/build.sh ${PROJECT_NAME} "base" "${ENV_NAME_UPPER}"
 ${target_dir}/run.sh ${PROJECT_NAME} "base" "${ENV_NAME_UPPER}"
