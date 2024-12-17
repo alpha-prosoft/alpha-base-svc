@@ -11,12 +11,6 @@
       params: '{{ params | combine( cloud_formation_output["stack_outputs"] ) }}'
 
   - include_role:
-      name: alpha-deploy-lib/deploy-cloudformation
-    vars:
-      type: 'BOT'
-      cloud_formation: '{{ playbook_dir }}/files/jira.yml'
-
-  - include_role:
       name: alpha-deploy-lib/cognito-idp-add-user
     vars:
       username: 'admin'
