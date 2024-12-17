@@ -13,7 +13,7 @@ curl -H 'Cache-Control: no-cache' \
 	> $target_dir/build.sh
 
 curl -H 'Cache-Control: no-cache' \
-        https://raw.githubusercontent.com/raiffeisenbankinternational/cbd-jenkins-pipeline/master/ext/deploy.sh \
+        https://raw.githubusercontent.com/raiffeisenbankinternational/cbd-jenkins-pipeline/master/ext/run.sh \
 	> $target_dir/run.sh
 
 chmod +x ${target_dir}/build.sh
