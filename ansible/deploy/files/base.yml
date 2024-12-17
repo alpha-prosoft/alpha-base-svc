@@ -147,6 +147,27 @@ Resources:
       UserPoolName: !Sub "${EnvironmentNameLower}-${ServiceName}-userpool"
 
 
+  AuthUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      AllowedOAuthFlows:
+        - implicit
+        - code
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+      AllowedOAuthFlowsUserPoolClient: True
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      ClientName: !Sub "${EnvironmentNameLower}-${ServiceName}-userpoolclient"
+      GenerateSecret: True
+      SupportedIdentityProviders:
+        - COGNITO
+      UserPoolId: !Ref UserPool
+
   GroupNonInteractive:
     Type: AWS::Cognito::UserPoolGroup
     Properties:
@@ -261,6 +282,9 @@ Outputs:
 
   AuthUserPoolId:
     Value: !Ref UserPool
+
+  AuthUserPoolClientId:
+    Value: !Ref AuthUserPoolClient
 
   UserPoolClientSecretResource:
     Value: !GetAtt UserPoolClientSecret.Arn

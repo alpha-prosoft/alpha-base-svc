@@ -10,29 +10,6 @@ ElkRole:
     AWSServiceName: "es.amazonaws.com"
     Description: 'Role for ES to access resources in VPC'
 
-  AuthUserPoolClient:
-    Type: AWS::Cognito::UserPoolClient
-    Properties:
-      AllowedOAuthFlows:
-        - implicit
-        - code
-      ExplicitAuthFlows:
-        - ALLOW_REFRESH_TOKEN_AUTH
-        - ALLOW_USER_PASSWORD_AUTH
-        - ALLOW_ADMIN_USER_PASSWORD_AUTH
-      AllowedOAuthFlowsUserPoolClient: True
-      AllowedOAuthScopes:
-        - openid
-        - email
-        - profile
-      CallbackURLs:
-        - !Sub "https://login.${PrivateHostedZoneName}/oauth2/idpresponse"
-      ClientName: !Sub "${EnvironmentNameLower}-${ServiceName}-client"
-      DefaultRedirectURI: !Sub  "https://login.${PrivateHostedZoneName}/oauth2/idpresponse"
-      GenerateSecret: True
-      SupportedIdentityProviders:
-        - COGNITO
-      UserPoolId: !Ref UserPool
 
   LoginListenerRule:
     Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
