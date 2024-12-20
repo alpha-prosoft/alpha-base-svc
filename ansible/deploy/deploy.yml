@@ -35,7 +35,7 @@
         
         set -euo pipefail 
         
-        services=("jenkins" "gerrit" "workflow", "portal")
+        services=("jenkins" "gerrit" "workflow" "portal")
         echo "We will create ssh keys for services: ${services}"
         region='{{ params["Region"] }}'
         
