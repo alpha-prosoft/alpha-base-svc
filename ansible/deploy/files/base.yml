@@ -275,7 +275,7 @@ Outputs:
     Value: !GetAtt LoadBalancer.DNSName
 
   AuthUserPoolDomain:
-    Value: !Sub "${UserPoolDoman}.auth.${AWS::Region}.amazoncognito.com"
+    Value: !Sub "login.${PrivateHostedZoneName}"
 
   AuthUserPoolId:
     Value: !Ref UserPool
