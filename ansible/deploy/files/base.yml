@@ -183,7 +183,7 @@ Resources:
       GroupName: "developers"
       UserPoolId: !Ref UserPool
 
-  UserPoolDoman:
+  UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
       UserPoolId: !Ref UserPool
