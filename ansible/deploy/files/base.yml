@@ -183,11 +183,14 @@ Resources:
       GroupName: "developers"
       UserPoolId: !Ref UserPool
 
-  UserPoolDoman:
+  UserPoolLoginDoman:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: !Sub "${AWS::AccountId}-${EnvironmentNameLower}-${ServiceName}"
       UserPoolId: !Ref UserPool
+      Domain: !Sub "login.${PrivateHostedZoneName}"
+      CustomDomainConfig:
+        CertificateArn: !Ref Certificate
+
 
   UserPoolClientSecret:
     Type: AWS::Lambda::Function
