@@ -44,8 +44,8 @@
           local service_name="$1"
           echo "We will to create Ed25519 SSH key for ${service_name} store in Parameter Store"
         
-          local private_key_path="/keys/private/${service_name}/private-key"
-          local public_key_path="/keys/public/${service_name}/public-key"
+          local private_key_path="/{{ params['EnvironmentNameLower'] }}/keys/private/${service_name}/private-key"
+          local public_key_path="/{{ params['EnvironmentNameLower'] }}/keys/public/${service_name}/public-key"
         
           echo "Preparing workdir for ${service_name}..."      
           temp_private_key=$(mktemp)
