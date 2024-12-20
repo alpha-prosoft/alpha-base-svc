@@ -187,7 +187,7 @@ Resources:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
       UserPoolId: !Ref UserPool
-      Domain: !Sub "login.${PrivateHostedZoneName}"
+      Domain: !Sub "ops-auth.${PrivateHostedZoneName}"
       CustomDomainConfig:
         CertificateArn: !Ref Certificate
 
@@ -275,7 +275,7 @@ Outputs:
     Value: !GetAtt LoadBalancer.DNSName
 
   AuthUserPoolDomain:
-    Value: !Sub "login.${PrivateHostedZoneName}"
+    Value: !Sub "ops-auth.${PrivateHostedZoneName}"
 
   AuthUserPoolId:
     Value: !Ref UserPool
