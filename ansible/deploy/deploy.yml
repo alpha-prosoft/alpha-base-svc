@@ -22,7 +22,7 @@
       #!/bin/bash
       
       services=("jenkins" "gerrit" "workflow", "portal")
-      echo "We will create ssh keys for services: ${services}
+      echo "We will create ssh keys for services: ${services}"
       region='{{ params["Region"] }}'
       
       
