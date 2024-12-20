@@ -1,79 +1,91 @@
 - name: 'Build Jenkins AMI'
   hosts: localhost
   tasks:
-  - include_role:
-     name: alpha-deploy-lib/deploy-cloudformation
-    vars:
-      type: 'BASE'
-      cloud_formation: '{{ playbook_dir }}/files/base.yml'
+    - name: 'Deploy CloudFront'
+      include_role:
+        name: alpha-deploy-lib/deploy-cloudformation
+      vars:
+        cloud_formation: '{{ playbook_dir }}/files/global.yaml'
+        type: 'GLOBAL'
+        local_params:
+          Region: us-east-1
 
-  - set_fact:
-      params: '{{ params | combine( cloud_formation_output["stack_outputs"] ) }}'
+    - set_fact:
+        params: '{{ params | combine( cloud_formation_output["stack_outputs"] ) }}'
 
-  - include_role:
-      name: alpha-deploy-lib/cognito-idp-add-user
-    vars:
-      username: 'admin'
-      cognito_groups:
-      - administrators
+    - include_role:
+        name: alpha-deploy-lib/deploy-cloudformation
+      vars:
+        type: 'BASE'
+        cloud_formation: '{{ playbook_dir }}/files/base.yml'
 
-  - name: "Create service keys"
-    shell: |
-      #!/bin/bash
-      
-      services=("jenkins" "gerrit" "workflow", "portal")
-      echo "We will create ssh keys for services: ${services}"
-      region='{{ params["Region"] }}'
-      
-      
-      create_and_store_key() {
-        local service_name="$1"
-        echo "We will to create Ed25519 SSH key for ${service_name} store in Parameter Store"
+    - set_fact:
+        params: '{{ params | combine( cloud_formation_output["stack_outputs"] ) }}'
 
-        local private_key_path="/keys/private/${service_name}/private-key"
-        local public_key_path="/keys/public/${service_name}/public-key"
-                
-        echo "Preparing workdir for ${service_name}..."      
-        temp_private_key=$(mktemp)
-      
-        echo "Generate Ed25519 SSH key pair without passphrase"
-        ssh-keygen -t ed25519 -N "" -f "$temp_private_key"
+    - include_role:
+        name: alpha-deploy-lib/cognito-idp-add-user
+      vars:
+        username: 'admin'
+        cognito_groups:
+          - administrators
 
-
-        echo "Storing public key in Parameter Store"
-        echo "We store public key first in case of failure we should start all over"
-        aws ssm put-parameter \
-          --region "$region" \
-          --name "$public_key_path" \
-          --value "$(cat "${temp_private_key}.pub")" \
-          --type "String" \
-          --overwrite
-      
-        echo "Storeing private key in ${private_key_path}"
-        aws ssm put-parameter \
-          --region "$region" \
-          --name "$private_key_path" \
-          --value "$(cat "$temp_private_key")" \
-          --type "SecureString" \
-          --overwrite
-  
-      
-        echo "Ed25519 SSH key for ${service_name} created and stored in Parameter Store."
-
-        echo "Clean up temporary file"
-        rm "$temp_private_key" "${temp_private_key}.pub"
-      }
-      
-      echo "Iterating through the list of services"
-      for service in "${services[@]}"; do
-        private_key_param="/keys/private/${service}/ssh-key"
-        echo "Checking if the key already exists in Parameter Store"
-        if ! aws ssm get-parameter --region "$region" --name "$private_key_param" --query "Parameter.Name" --output text &> /dev/null; then
-          echo "SSH key for ${service} does not exist. Creating..."
-          create_and_store_key "$service"
-        else
-          echo "SSH key for ${service} already exists."
-        fi
-      done
-      
-      echo "Finished processing SSH keys."
+    - name: "Create service keys"
+      shell: |
+        #!/bin/bash
+        
+        services=("jenkins" "gerrit" "workflow", "portal")
+        echo "We will create ssh keys for services: ${services}"
+        region='{{ params["Region"] }}'
+        
+        
+        create_and_store_key() {
+          local service_name="$1"
+          echo "We will to create Ed25519 SSH key for ${service_name} store in Parameter Store"
+        
+          local private_key_path="/keys/private/${service_name}/private-key"
+          local public_key_path="/keys/public/${service_name}/public-key"
+        
+          echo "Preparing workdir for ${service_name}..."      
+          temp_private_key=$(mktemp)
+        
+          echo "Generate Ed25519 SSH key pair without passphrase"
+          ssh-keygen -t ed25519 -N "" -f "$temp_private_key"
+        
+        
+          echo "Storing public key in Parameter Store"
+          echo "We store public key first in case of failure we should start all over"
+          aws ssm put-parameter \
+            --region "$region" \
+            --name "$public_key_path" \
+            --value "$(cat "${temp_private_key}.pub")" \
+            --type "String" \
+            --overwrite
+        
+          echo "Storeing private key in ${private_key_path}"
+          aws ssm put-parameter \
+            --region "$region" \
+            --name "$private_key_path" \
+            --value "$(cat "$temp_private_key")" \
+            --type "SecureString" \
+            --overwrite
+        
+        
+          echo "Ed25519 SSH key for ${service_name} created and stored in Parameter Store."
+        
+          echo "Clean up temporary file"
+          rm "$temp_private_key" "${temp_private_key}.pub"
+        }
+        
+        echo "Iterating through the list of services"
+        for service in "${services[@]}"; do
+          private_key_param="/keys/private/${service}/ssh-key"
+          echo "Checking if the key already exists in Parameter Store"
+          if ! aws ssm get-parameter --region "$region" --name "$private_key_param" --query "Parameter.Name" --output text &> /dev/null; then
+            echo "SSH key for ${service} does not exist. Creating..."
+            create_and_store_key "$service"
+          else
+            echo "SSH key for ${service} already exists."
+          fi
+        done
+        
+        echo "Finished processing SSH keys."

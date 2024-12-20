@@ -25,6 +25,9 @@ Parameters:
   LoadBalancerScheme:
     Type: String
 
+  GlobalCertificateArn:
+    Type: String
+
 Resources:
 
   ConfigurationBucket:
@@ -189,7 +192,7 @@ Resources:
       UserPoolId: !Ref UserPool
       Domain: !Sub "ops-auth.${PrivateHostedZoneName}"
       CustomDomainConfig:
-        CertificateArn: !Ref Certificate
+        CertificateArn: !Ref GlobalCertificateArn
 
 
   UserPoolClientSecret:
