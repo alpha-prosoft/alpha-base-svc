@@ -33,6 +33,8 @@
       shell: |
         #!/bin/bash
         
+        set -euo pipefail 
+        
         services=("jenkins" "gerrit" "workflow", "portal")
         echo "We will create ssh keys for services: ${services}"
         region='{{ params["Region"] }}'
@@ -49,12 +51,12 @@
           temp_private_key=$(mktemp)
 
           echo "Remove temp file because ssh-keygen does not like it"
-          rm $temp_private_key
+          rm -f $temp_private_key
         
           echo "Generate Ed25519 SSH key pair without passphrase"
           ssh-keygen -t ed25519 -N "" -f "$temp_private_key"
         
-        
+      
           echo "Storing public key in Parameter Store"
           echo "We store public key first in case of failure we should start all over"
           aws ssm put-parameter \
