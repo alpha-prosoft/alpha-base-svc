@@ -47,6 +47,9 @@
         
           echo "Preparing workdir for ${service_name}..."      
           temp_private_key=$(mktemp)
+
+          echo "Remove temp file because ssh-keygen does not like it"
+          rm $temp_private_key
         
           echo "Generate Ed25519 SSH key pair without passphrase"
           ssh-keygen -t ed25519 -N "" -f "$temp_private_key"
