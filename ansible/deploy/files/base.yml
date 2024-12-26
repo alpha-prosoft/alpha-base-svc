@@ -241,7 +241,7 @@ Resources:
           def handler(event, context):
             responseData = {}
             response = ""
-            if event['RequestType'] == 'Create':
+            if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
               domain = event['ResourceProperties']['Domain']
               response = cognito.describe_user_pool_domain(Domain=domain)
               distribution = response['DomainDescription']['CloudFrontDistribution']
@@ -269,7 +269,7 @@ Resources:
   UserPoolDomainRecord:
     Type: AWS::Route53::RecordSet
     Properties:
-      HostedZoneName: !Sub "${PublicHostedZoneName}."
+      HostedZoneId: !Sub "${PublicHostedZoneId}."
       Name: !Ref UserPoolDomain
       Type: A
       AliasTarget:
@@ -296,7 +296,7 @@ Resources:
           def lambda_handler(event, context):
             logger.info('got event {}'.format(event))
             responseData = {}
-            if event['RequestType'] == 'Create':
+            if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
               client = boto3.client('cognito-idp')
               response = client.describe_user_pool_client(
                   UserPoolId=event['ResourceProperties'].get('UserPoolId', 6),
