@@ -269,7 +269,7 @@ Resources:
   UserPoolDomainRecord:
     Type: AWS::Route53::RecordSet
     Properties:
-      HostedZoneId: !Sub "${PublicHostedZoneId}."
+      HostedZoneId: !Ref PublicHostedZoneId
       Name: !Ref UserPoolDomain
       Type: A
       AliasTarget:
@@ -360,7 +360,7 @@ Outputs:
     Value: !GetAtt LoadBalancer.DNSName
 
   AuthUserPoolDomain:
-    Value: !Sub "ops-auth.${PublicHostedZoneName}"
+    Value: !Ref UserPoolDomain
 
   AuthUserPoolId:
     Value: !Ref UserPool
