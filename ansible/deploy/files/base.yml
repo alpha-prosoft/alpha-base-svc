@@ -305,7 +305,7 @@ Resources:
               responseData['ClientSecret'] = response['UserPoolClient']['ClientSecret']
             logger.info('responseData {}'.format(responseData))
             cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, responseData['ClientSecret'])
-      FunctionName: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${EnvironmentNameUpper}-user-pool-client-secret'
+      FunctionName: !Sub '${EnvironmentNameUpper}-user-pool-client-secret'
       Handler: "index.lambda_handler"
       Timeout: 30
       Role: !GetAtt 'LambdaRole.Arn'
