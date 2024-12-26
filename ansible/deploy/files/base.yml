@@ -240,13 +240,16 @@ Resources:
           
           def handler(event, context):
             responseData = {}
+            response = ""
             if event['RequestType'] == 'Create':
               domain = event['ResourceProperties']['Domain']
               response = cognito.describe_user_pool_domain(Domain=domain)
               distribution = response['DomainDescription']['CloudFrontDistribution']
               responseData["CloudFrontDistribution"]= distribution
+              response = responseData['CloudFrontDistribution']
+              
             logger.info('responseData {}'.format(responseData))
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, responseData['CloudFrontDistribution'])
+            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, response)
 
 
   GetCloudFrontDistribution:
