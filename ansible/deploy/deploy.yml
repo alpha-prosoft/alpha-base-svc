@@ -26,6 +26,7 @@
         name: alpha-deploy-lib/cognito-idp-add-user
       vars:
         username: 'admin'
+        name: 'Admin'
         cognito_groups:
           - administrators
 
