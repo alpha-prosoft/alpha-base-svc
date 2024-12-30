@@ -6,13 +6,19 @@ Parameters:
 
   EnvironmentNameUpper:
     Type: String
+    
   EnvironmentNameLower:
     Type: String
+    
   VPCId:
     Type: String
 
   PublicHostedZoneId:
     Type: String
+
+  PrivateHostedZoneId:
+    Type: String
+
   PublicHostedZoneName:
     Type: String
 
@@ -276,6 +282,18 @@ Resources:
         HostedZoneId: Z2FDTNDATAQYW2
         DNSName: !GetAtt GetCloudFrontDistribution.CloudFrontDistribution
         EvaluateTargetHealth: false
+
+  UserPoolDomainRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref PrivateHostedZoneId
+      Name: !Ref UserPoolDomain
+      Type: A
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt GetCloudFrontDistribution.CloudFrontDistribution
+        EvaluateTargetHealth: false
+
 
   UserPoolClientSecretFunction:
     Type: AWS::Lambda::Function
