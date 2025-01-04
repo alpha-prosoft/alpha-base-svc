@@ -11,4 +11,9 @@ FROM ${DOCKER_REGISTRY_URL}/alphaprosoft/ansible-img:latest
 
 ENV BUILD_ID ${BUILD_ID}
 
+COPY --chown=build:build src src
+
+RUN cd src &&\
+    zip -r /dist/lambda-function.zip *
+
 

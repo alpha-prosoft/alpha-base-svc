@@ -6,10 +6,10 @@ Parameters:
 
   EnvironmentNameUpper:
     Type: String
-    
+
   EnvironmentNameLower:
     Type: String
-    
+
   VPCId:
     Type: String
 
@@ -34,8 +34,13 @@ Parameters:
   GlobalCertificateArn:
     Type: String
 
-Resources:
+  S3LambdaBucketName:
+    Type: String
 
+  S3LambdaObjectName:
+    Type: String
+
+Resources:
   ConfigurationBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
@@ -126,6 +131,40 @@ Resources:
             MessageBody: "You've reached the listener! Congrats! Now please leave :)"
             StatusCode: "200"
 
+  PreTokenGenerationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  PreTokenTriggerLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${EnvironmentNameUpper}-pre-token-trigger"
+      Handler: pretoken.lambda_handler
+      Runtime: python3.9  # Choose your desired Python runtime
+      Role: !GetAtt PreTokenGenerationLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref S3LambdaBucketName
+        S3Key: !Ref S3LambdaObjectName
+      MemorySize: 128
+      Timeout: 30
+
+  CognitoInvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PreTokenTriggerLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
 
   UserPool:
     Type: AWS::Cognito::UserPool
@@ -151,6 +190,8 @@ Resources:
           RequireNumbers: True
           RequireUppercase: True
           TemporaryPasswordValidityDays: 1
+      LambdaConfig:
+        PreTokenGeneration: !GetAtt PreTokenTriggerLambdaFunction.Arn
       UserPoolAddOns:
         AdvancedSecurityMode: "AUDIT"
       UserPoolName: !Sub "${EnvironmentNameLower}-${ServiceName}-userpool"
@@ -241,7 +282,7 @@ Resources:
           
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
-      
+          
           cognito = boto3.client('cognito-idp')
           
           def handler(event, context):
@@ -253,7 +294,7 @@ Resources:
               distribution = response['DomainDescription']['CloudFrontDistribution']
               responseData["CloudFrontDistribution"]= distribution
               response = responseData['CloudFrontDistribution']
-              
+          
             logger.info('responseData {}'.format(responseData))
             cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, response)
 
@@ -272,7 +313,7 @@ Resources:
       CustomDomainConfig:
         CertificateArn: !Ref GlobalCertificateArn
 
-  UserPoolDomainRecord:
+  UserPoolDomainRecordPublic:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: !Ref PublicHostedZoneId
@@ -283,7 +324,7 @@ Resources:
         DNSName: !GetAtt GetCloudFrontDistribution.CloudFrontDistribution
         EvaluateTargetHealth: false
 
-  UserPoolDomainRecord:
+  UserPoolDomainRecordPrivate:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: !Ref PrivateHostedZoneId

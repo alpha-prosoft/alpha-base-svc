@@ -1,6 +1,31 @@
 - name: 'Build Jenkins AMI'
   hosts: localhost
   tasks:
+    - amazon.aws.s3_bucket:
+        name: '{{ params["DeploymentS3BucketName"] }}'
+        region: '{{ params["Region"] }}'
+        encryption: AES256
+        tags: 
+          Environment: '{{ params["EnvironmentNameLower"] }}'
+        policy: 
+          Version: '2012-10-17'
+          Statement:
+           - Sid: DenyUnencryptedObjectUploads
+             Effect: Deny
+             Principal: "*"
+             Action: s3:PutObject
+             Resource: 'arn:aws:s3:::{{ params["DeploymentS3BucketName"] }}/*'
+             Condition:
+               Bool:
+                 aws:SecureTransport: 'false'
+
+    - name: 'Configure auto deletion'
+      community.aws.s3_lifecycle:
+        name: '{{ params["DeploymentS3BucketName"] }}'
+        expiration_days: 30
+        status: enabled
+        state: present
+
     - name: 'Deploy CloudFront'
       include_role:
         name: alpha-deploy-lib/deploy-cloudformation
@@ -12,6 +37,19 @@
 
     - set_fact:
         params: '{{ params | combine( cloud_formation_output["stack_outputs"] ) }}'
+
+    - set_fact:
+        params: '{{ params | combine({ "S3LambdaObjectName" : params["ServiceName"] + "/lambda-function-" + params["BuildId"] + ".zip",
+                                       "S3LambdaBucketName" : params["DeploymentS3BucketName"]})}}'
+
+    - name: 'Upload lambda package to S3'
+      aws_s3:
+        bucket: '{{ params["S3LambdaBucketName"] }}'
+        region: '{{ params["Region"] }}'
+        mode: put
+        src: '/dist/lambda-function.zip'
+        object: '{{ params["S3LambdaObjectName"] }}'
+      environment: '{{ params }}'
 
     - include_role:
         name: alpha-deploy-lib/deploy-cloudformation
