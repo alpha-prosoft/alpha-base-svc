@@ -40,6 +40,42 @@ Parameters:
   S3LambdaObjectName:
     Type: String
 
+  OidcProviderName:
+    Type: String
+    Default: "-"
+
+  OidcAttributeMappingEmail:
+    Type: String
+    Default: "-"
+  OidcAttributeMappingName:
+    Type: String
+    Default: "-"
+  OidcAttributeMappingProfile:
+    Type: String
+    Default: "-"
+  OidcAttributeMappingUsername:
+    Type: String
+    Default: "-"
+
+  OidcProviderDetailsClientId:
+    Type: String
+    Default: "-"
+  OidcProviderDetailsClientSecret:
+    Type: String
+    Default: "-"
+  OidcProviderDetailsAuthorizedScopes:
+    Type: String
+    Default: "-"
+  OidcProviderDetailsOidcIssuer:
+    Type: String
+    Default: "-"
+  OidcProviderDetailsAttributeRequestMethod:
+    Type: String
+    Default: "-"
+
+Conditions:
+  HasOidcProvider: !Not [ !Equals [ !Ref OidcProviderName, "-" ] ]
+
 Resources:
   ConfigurationBucket:
     Type: AWS::S3::Bucket
@@ -195,6 +231,24 @@ Resources:
       UserPoolAddOns:
         AdvancedSecurityMode: "AUDIT"
       UserPoolName: !Sub "${EnvironmentNameLower}-${ServiceName}-userpool"
+
+  AuthUserPoolIdentityProvider:
+    Type: 'AWS::Cognito::UserPoolIdentityProvider'
+    Properties:
+      ProviderName: !Ref OidcProviderName
+      ProviderType: OIDC
+      AttributeMapping:
+        email: !Ref OidcAttributeMappingEmail
+        name: !Ref OidcAttributeMappingName
+        profile: !Ref OidcAttributeMappingProfile
+        username: !Ref OidcAttributeMappingUsername
+      ProviderDetails:
+        client_id: !Ref OidcProviderDetailsClientId
+        client_secret: !Ref OidcProviderDetailsClientSecret
+        authorize_scopes: !Ref OidcProviderDetailsAuthorizedScopes
+        oidc_issuer: !Ref OidcProviderDetailsOidcIssuer
+        attributes_request_method: !Ref OidcProviderDetailsAttributeRequestMethod
+      UserPoolId: !Ref UserPool
 
 
   AuthUserPoolClient:
@@ -423,6 +477,9 @@ Outputs:
 
   AuthUserPoolId:
     Value: !Ref UserPool
+
+  AuthUserPoolIdentityProvider:
+    Value: !Ref AuthUserPoolIdentityProvider
 
   AuthUserPoolClientId:
     Value: !Ref AuthUserPoolClient
